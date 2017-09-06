@@ -24,7 +24,7 @@ database.db4.url="jdbc:h2:mem:test:tcp://localhost/~/db4"
 database.db4.username=sa
 database.db4.password=
 ```
-
+You can specify your own database aliases ('db1' .. 'db4' in above sample configuration).
 
 Put the JDBC (version 4.0 or higher) drivers of the databases you want to connect to in the sql-template-cli-x.x.x/lib directory.
 
@@ -33,13 +33,15 @@ To enter the sql-template-cli shell run `sql-template-cli-x.x.x/bin/sql-template
 
 sql-template-cli provides tab completion to speed up typing commands, to see which commands are available and what parameters are supported.
 
-*In addition to typing commands in the shell it is also possible to pass a command directly to the sql-template-cli executable:*
+In addition to typing commands in the shell it is also possible to pass a command directly to the sql-template-cli executable.
+
 Example:`sql-template-cli tables --database db1`
 
-*It is also possible to specify a file containing commands to execute:*
+It is also possible to specify a file containing commands to execute.
+
 Example:`sql-template-cli --cmdfile my_commands.txt`
 
-To connect to a database that is configured in `sql-template-cli-x.x.x/conf/sql-template-cli.conf`:`connect --database db1`
+To connect to a database that is configured in `sql-template-cli-x.x.x/conf/sql-template-cli.conf` type in the following command in the shell: `connect --database db1`
 
 Below is a list of commands that sql-template-cli supports. 
 
@@ -49,7 +51,7 @@ Connects to a database.
 Technically speaking this command connects to the database to verify the database configuration and then disconnects. 
 Every command runs using its own connection. The main reason to use the connect command is so the --database option can be omitted in subsequent commands. In addition when sql-template-cli is connected to a database it can provide auto-completion for the --table option in subsequent commands.
 
-Note: table auto-completion depends on a template (sql-template-cli/template/provided/[DATABASE-TYPE]/tables.sql]) for the database type the command is executed for. If the template is not provided by sql-template-cli, you can create it yourself.
+Note: table auto-completion depends on a template (located in sql-template-cli/template/provided/[DATABASE-TYPE]/tables.sql]) for the database type the command is executed for. If the template is not provided by sql-template-cli, you can create it yourself.
 
 ##### Parameters:
   - database
@@ -60,7 +62,7 @@ Example:`connect --database db1`
 
 Lists the columns
 
-Note: this command depends on a template (sql-template-cli/template/provided/[DATABASE-TYPE]/columns.sql]) for the database type this command is executed for. If the template is not provided by sql-template-cli, you can create it yourself.
+Note: this command depends on a template (located in sql-template-cli/template/provided/[DATABASE-TYPE]/columns.sql]) for the database type this command is executed for. If the template is not provided by sql-template-cli, you can create it yourself.
 
 ##### Parameters:
   - table
@@ -86,8 +88,11 @@ Lists records of a table (or view)
   - output-format (console, csv or excel)
 
 Example 1:`data --table person`
+
 Example 2:`data --table person --filter surname='Doe' --order firstname`
+
 Example 3:`data --table person --filter "firstname='John' and surname='Doe'" --count`
+
 Example 4:`data --table person --order "surname, id desc" --output-format excel --output-path ~/Desktop`
 
 ### disconnect
@@ -133,6 +138,7 @@ Executes an SQL statement
   - p1 .. p20 (parameters required by the SQL statement)
 
 Example 1:`execute --sql "select * from person"`
+
 Example 2:`execute --template persons_by_city --p1 Amsterdam`
 
 ### exit
@@ -188,6 +194,7 @@ Note: this command depends on a template (sql-template-cli/template/provided/[DA
   - filter (if specified only tables with the specified filter in their name are listed)
 
 Example 1:`tables`
+
 Example 2:`tables --filter person --database db1`
 
 ### version
