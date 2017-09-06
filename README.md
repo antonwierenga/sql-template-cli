@@ -23,6 +23,7 @@ database.db3.password.encrypted="JPWORxwMO+k="
 database.db4.url="jdbc:h2:mem:test:tcp://localhost/~/db4"
 database.db4.username=sa
 database.db4.password=
+database.db4.template.dirs=[${app_home}/template/h2,${app_home}/template/my_app]
 ```
 You can specify your own database aliases ('db1' .. 'db4' in above sample configuration).
 
@@ -122,7 +123,7 @@ Example:`encrypt-password`
 
 ### execute
 
-Executes an SQL statement
+Executes an inline SQL statement or template file containing the SQL statement
 
 ##### Parameters:
   - columns (comma seperated list of columns to show)
@@ -131,7 +132,7 @@ Executes an SQL statement
   - max-rows (max number of rows to show)
   - sql (inline SQL statement to execute)
   - table-border (false to ommit the table border)
-  - template (template file containing the SQL to execute, supports TAB auto-completion)
+  - template (template file containing the SQL to execute (.sql extension may be omitted), supports TAB auto-completion)    
   - timeout (number of seconds to wait for the statement to execute)
   - output-path (output path to use when output-format csv or excel is specified)  
   - output-format (console, csv or excel)
@@ -139,7 +140,21 @@ Executes an SQL statement
 
 Example 1:`execute --sql "select * from person"`
 
-Example 2:`execute --template persons_by_city --p1 Amsterdam`
+Example 2:`execute --template persons_by_city --p1 Amsterdam` 
+
+The template must exist in either the `sql-template-cli-x.x.x/template` directory itself or in one of the configured template directories configured in `sql-template-cli-x.x.x/conf/sql-template-cli.conf`.
+
+Given the following configuration:
+```scala
+database.db4.template.dirs=[${app_home}/template/h2,${app_home}/template/my_app]
+```
+sql-template-cli will look for templates that are executed for database with alias 'db4' in the following directories:
+
+`sql-template-cli-x.x.x/template`
+
+`sql-template-cli-x.x.x/template/h2`
+
+`sql-template-cli-x.x.x/template/my_app`
 
 ### exit
 
