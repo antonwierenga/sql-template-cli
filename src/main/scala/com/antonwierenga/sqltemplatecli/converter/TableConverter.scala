@@ -33,7 +33,7 @@ class TableConverter extends Converter[Table] {
   @Override
   def convertFromText(text: String, requiredType: Class[_], optionContext: String): Table = {
     val tableName = if (!text.contains('.')) {
-      val tables = Application.database.get.tables.filter(_.endsWith(s".$text"))
+      val tables = Application.database.get.tables.filter(_.toLowerCase().endsWith(s".${text.toLowerCase()}"))
       if (tables.size() == 1) {
         tables(0)
       } else {

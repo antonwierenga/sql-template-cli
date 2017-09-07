@@ -2,7 +2,7 @@ organization := "com.antonwierenga"
 
 name := "sql-template-cli"
 
-version := "0.1.0"
+version := "0.0.1"
 
 scalaVersion := "2.12.1"
 

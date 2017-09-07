@@ -23,6 +23,7 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 
 import java.io.File
+import java.nio.file.Paths
 import java.text.SimpleDateFormat
 import java.util.logging.LogManager
 import java.util.logging.Level
@@ -45,20 +46,26 @@ class Application extends CommandMarker {
 
 object Application extends App {
 
-  lazy val ReleaseNotes = Map("v0.0.0" → List(
-    "New shell command 'connect'",
-    "New shell command 'columns'",
-    "New shell command 'data'",
-    "New shell command 'disconnect'",
-    "New shell command 'encrypt-password'",
-    "New shell command 'execute'",
-    "New shell command 'release-notes'",
-    "New shell command 'show-template'",
-    "New shell command 'tables'",
-    "New shell command 'version'"
-  ))
+  lazy val ReleaseNotes = Map(
+    "v0.0.1" → List(
+      "Enhanced table auto-completion (no need to specify the schema when table name is given)",
+      "Fixed a bug that caused an error when sql-template-cli was running from a path that contains spaces (Windows)"
+    ),
+    "v0.0.0" → List(
+      "New shell command 'connect'",
+      "New shell command 'columns'",
+      "New shell command 'data'",
+      "New shell command 'disconnect'",
+      "New shell command 'encrypt-password'",
+      "New shell command 'execute'",
+      "New shell command 'release-notes'",
+      "New shell command 'show-template'",
+      "New shell command 'tables'",
+      "New shell command 'version'"
+    )
+  )
 
-  lazy val ApplicationPath: String = s"${new File(classOf[Application].getProtectionDomain.getCodeSource.getLocation.getFile).getParentFile.getParentFile}"
+  lazy val ApplicationPath: String = s"${Paths.get(classOf[Application].getProtectionDomain.getCodeSource.getLocation.toURI).toFile.getParentFile.getParentFile}"
   lazy val ApplicationOutputPath: File = new File(ApplicationPath, "output")
 
   if (!ApplicationOutputPath.exists()) ApplicationOutputPath.mkdir()
