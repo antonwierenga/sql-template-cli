@@ -1,6 +1,6 @@
 # sql-template-cli
 A command-line SQL tool whose main goal is to provide a quick way to execute predefined SQL statements (templates) against configured databases.
-In addition it offers commands for listing tables, columns, data, Excel exports and more. All features are consistent to use across all supported databases.
+In addition it offers commands for listing tables, columns, data, Excel exports and more. All features are consistent to use across all supported databases (databases for which a JDBC driver exists).
 
 ![alt text](/demo.png "sql-template-cli screenshot")
 
