@@ -22,7 +22,7 @@ database.db3.password.encrypted="JPWORxwMO+k="
 
 database.db4.url="jdbc:h2:mem:test:tcp://localhost/~/db4"
 database.db4.username=sa
-database.db4.password=
+database.db4.password=""
 database.db4.template.dirs=[${app_home}/template/h2,${app_home}/template/my_app]
 ```
 You can specify your own database aliases ('db1' .. 'db4' in above sample configuration).
