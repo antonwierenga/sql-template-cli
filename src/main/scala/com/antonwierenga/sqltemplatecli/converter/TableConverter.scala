@@ -32,17 +32,22 @@ class TableConverter extends Converter[Table] {
 
   @Override
   def convertFromText(text: String, requiredType: Class[_], optionContext: String): Table = {
-    val tableName = if (!text.contains('.')) {
-      val tables = Application.database.get.tables.filter(_.toLowerCase().endsWith(s".${text.toLowerCase()}"))
-      if (tables.size() == 1) {
-        tables(0)
-      } else {
-        text
-      }
-    } else {
-      text
+    Application.database match {
+      case Some(matched) ⇒
+        val tableName = if (!text.contains('.')) {
+          val tables = matched.tables.filter(_.toLowerCase().endsWith(s".${text.toLowerCase()}"))
+          if (tables.size() == 1) {
+            tables(0)
+          } else {
+            text
+          }
+        } else {
+          text
+        }
+        new Table(tableName)
+      case _ ⇒
+        new Table(text)
     }
-    new Table(tableName)
   }
 
   @Override
