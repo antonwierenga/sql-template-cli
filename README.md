@@ -20,7 +20,7 @@ database.db3.url="jdbc:oracle:thin:@localhost:1521:db3"
 database.db3.username=oracle
 database.db3.password.encrypted="JPWORxwMO+k="
 
-database.db4.url="jdbc:h2:mem:test:tcp://localhost/~/db4"
+database.db4.url="jdbc:h2:~/db4"
 database.db4.username=sa
 database.db4.password=""
 database.db4.template.dirs=[${app_home}/template/h2,${app_home}/template/my_app]
