@@ -39,17 +39,27 @@ import scala.collection.JavaConversions._
 class Application extends CommandMarker {
 
   @CliCommand(value = Array("release-notes"), help = "Displays release notes")
-  def releaseNotes: String = Application.ReleaseNotes.keySet.toSeq.sorted.reverse.map(x ⇒ s"$x\n" + Application.ReleaseNotes(x).map(y ⇒ s"    - $y")
+  def releaseNotes: String = Application.ReleaseNotes.keySet.toSeq.sorted.map(x ⇒ s"$x\n" + Application.ReleaseNotes(x).map(y ⇒ s"    - $y")
     .mkString("\n")).mkString("\n")
-
 }
 
 object Application extends App {
 
   lazy val ReleaseNotes = Map(
+    "v0.1.0" → List(
+      "New shell command 'encrypt-mail-password'",
+      "Updated shell command 'data' and 'execute': added options 'email-to', 'email-subject' and 'email-body'",
+      "Renamed shell command 'encrypt-password' to 'encrypt-database-password': added option 'database'",
+      "Updated shell commands 'data' and 'execute': renamed option 'output-format' to 'export-format",
+      "Updated shell commands 'data' and 'execute': renamed option 'output-path' to 'export-path'",
+      "Updated shell commands 'data' and 'execute': added option 'export-open' to automatically open the export file after it is created",
+      "Updated shell commands 'data' and 'execute': added export-format 'insert' for insert statement generation (using --export-format insert)",
+      "Updated shell commands 'data' and 'execute': added export-format 'html' for html generation (using --export-format html)",
+      "Updated shell commands 'data' and 'execute': added --count option"
+    ),
     "v0.0.1" → List(
       "Enhanced table auto-completion (no need to specify the schema when table name is given)",
-      "Fixed a bug that caused an error when sql-template-cli was running from a path that contains spaces (Windows)"
+      "Fixed a bug that caused an error when the sql-template-cli installation path contains a whitespace (Windows)"
     ),
     "v0.0.0" → List(
       "New shell command 'connect'",
@@ -79,6 +89,8 @@ object Application extends App {
 
   DateFormatter.setLenient(false)
   DateTimeFormatter.setLenient(false)
+
+  val Store = scala.collection.mutable.Map[String, Seq[Any]]()
 
   var database: Option[Database] = None
 

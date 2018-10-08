@@ -100,6 +100,7 @@ abstract class Commands extends PrintStackTraceExecutionProcessor with Encryptio
       callback(connection.get, database)
     } catch {
       case e: Exception ⇒ {
+        //e.printStackTrace
         logger.error("ERROR ", e)
         error(if (Option(e.getMessage).isDefined && e.getMessage.startsWith("ERROR:")) e.getMessage else s"ERROR: ${e.getMessage}")
       }

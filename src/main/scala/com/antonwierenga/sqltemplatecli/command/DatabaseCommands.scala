@@ -18,13 +18,14 @@ package com.antonwierenga.sqltemplatecli.command
 
 import com.antonwierenga.sqltemplatecli.Application
 import com.antonwierenga.sqltemplatecli.Application.ApplicationOutputPath
-import com.antonwierenga.sqltemplatecli.OutputFormat
+import com.antonwierenga.sqltemplatecli.ExportFormat
 import com.antonwierenga.sqltemplatecli.domain.Database
 import com.antonwierenga.sqltemplatecli.domain.Template
 import com.antonwierenga.sqltemplatecli.domain.Table
 import com.antonwierenga.sqltemplatecli.util.Console._
-import com.antonwierenga.sqltemplatecli.util.Implicits._
+import com.antonwierenga.sqltemplatecli.util.Email
 import com.antonwierenga.sqltemplatecli.util.Encryption
+import com.antonwierenga.sqltemplatecli.util.Implicits._
 
 import java.io.BufferedWriter
 import java.io.File
@@ -36,6 +37,7 @@ import java.sql.ResultSet
 import java.sql.ResultSetMetaData
 import java.sql.PreparedStatement
 import java.sql.Statement
+import java.sql.Types._
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,6 +67,8 @@ class DatabaseCommands extends Commands with Encryption {
   val MaxRowsHSSF = 65535
   val MaxRowsParameterUndefined = -2
 
+  val SqlDateFormat = new SimpleDateFormat("ddMMyyyy HH:mm:ss:SSS")
+
   @CliAvailabilityIndicator(Array("info", "disconnect"))
   def isDatabaseAvailable: Boolean = Application.database.isDefined
 
@@ -87,10 +91,22 @@ class DatabaseCommands extends Commands with Encryption {
     @CliOption(key = Array("table-border"), mandatory = false, help = "Table border for the query results") pTableBorder: String = null, //scalastyle:ignore
     @CliOption(key = Array("header-row"), mandatory = false, help = "Table border for the query results") pHeaderRow: String = null, //scalastyle:ignore
     @CliOption(key = Array("columns"), mandatory = false, help = "The columns to include in the query results") pColumns: String = null, //scalastyle:ignore
-    @CliOption(key = Array("output-path"), mandatory = false, specifiedDefaultValue = "specified",
-      help = "The name of the file to write the query results to") pOutputPath: String = null, //scalastyle:ignore
-    @CliOption(key = Array("output-format"), mandatory = false, unspecifiedDefaultValue = "console",
-      help = "The output format") pOutputFormat: OutputFormat = OutputFormat.console,
+    @CliOption(key = Array("export-path"), mandatory = false, specifiedDefaultValue = "specified",
+      help = "The name of the file to write the query results to") pExportPath: String = null, //scalastyle:ignore
+    @CliOption(key = Array("export-format"), mandatory = false, unspecifiedDefaultValue = "console",
+      help = "The output format") pExportFormat: ExportFormat = ExportFormat.console,
+    @CliOption(key = Array("export-open"), mandatory = false, specifiedDefaultValue = "true",
+      help = "Opens the output file in the default application") pExportOpen: String,
+    @CliOption(key = Array("insert-table-name"), mandatory = false,
+      help = "The output format") pInsertTableName: String = null,
+    @CliOption(key = Array("count"), mandatory = false, specifiedDefaultValue = "specified",
+      help = "If specified the query result is the row count") pCount: String,
+    @CliOption(key = Array("email-to"), mandatory = false,
+      help = "Comma separated list of email addresses") pEmailTo: String,
+    @CliOption(key = Array("email-subject"), mandatory = false,
+      help = "The subject of the email") pEmailSubject: String,
+    @CliOption(key = Array("email-body"), mandatory = false,
+      help = "The body of the email (html)") pEmailBody: String,
     @CliOption(key = Array("p1"), mandatory = false, help = "Parameter 1") p1: String = null, //scalastyle:ignore
     @CliOption(key = Array("p2"), mandatory = false, help = "Parameter 2") p2: String = null, //scalastyle:ignore
     @CliOption(key = Array("p3"), mandatory = false, help = "Parameter 3") p3: String = null, //scalastyle:ignore
@@ -112,20 +128,43 @@ class DatabaseCommands extends Commands with Encryption {
     @CliOption(key = Array("p19"), mandatory = false, help = "Parameter 19") p19: String = null, //scalastyle:ignore
     @CliOption(key = Array("p20"), mandatory = false, help = "Parameter 20") p20: String = null //scalastyle:ignore
   ): String = {
+    executeSql(pSql, pTemplate, pDatabase, pMaxRows, pTimeout, pTableBorder, pHeaderRow, pColumns, pExportPath, pExportFormat, pExportOpen, pInsertTableName, pCount,
+      p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, pEmailTo, pEmailSubject, pEmailBody)
+  }
+
+  def executeSql( //scalastyle:ignore 
+    // The number of parameters should not exceed 8
+    pSql: String, pTemplate: Template, pDatabase: Database, pMaxRows: Int = MaxRowsParameterUndefined, pTimeout: Int = 0, pTableBorder: String = null,
+    pHeaderRow: String = null, pColumns: String = null, pExportPath: String = null, pExportFormat: ExportFormat = ExportFormat.console, pExportOpen: Boolean = false,
+    pInsertTableName: String = null, pCount: String, p1: String = null, p2: String = null, p3: String = null, p4: String = null, p5: String = null,
+    p6: String = null, p7: String = null, p8: String = null, p9: String = null, p10: String = null, p11: String = null, p12: String = null, p13: String = null,
+    p14: String = null, p15: String = null, p16: String = null, p17: String = null, p18: String = null, p19: String = null, p20: String = null,
+    pEmailTo: String = null, pEmailSubject: String = null, pEmailBody: String = null
+  ): String = {
 
     withConnection((connection: Connection, database: Database) ⇒ {
       val start = System.currentTimeMillis
       val sql: String = if (Option(pTemplate).isDefined) getTemplate(pTemplate.name, Option(database)) else pSql
+
       var maxRowsReached = false
-      val preparedStatement = connection.prepareStatement(sql)
+      val preparedStatement = connection.prepareStatement(if (pCount) s"select count(*) from ($sql) subquery_alias" else sql)
       val tableBorder = parseBoolean(pTableBorder, Application.Config.getBoolean(s"console.table.border"))
       val headerRow = parseBoolean(pHeaderRow, Application.Config.getBoolean(s"console.table.header"))
       val maxRows = if (pMaxRows > 0) {
         pMaxRows
-      } else if (pMaxRows == MaxRowsParameterUndefined && pOutputFormat == OutputFormat.console) {
+      } else if (pMaxRows == MaxRowsParameterUndefined && pExportFormat == ExportFormat.console) {
         Application.Config.getInt(s"console.rows.max")
       } else {
         0
+      }
+
+      if (pExportFormat == ExportFormat.insert && !pInsertTableName) {
+        throw new IllegalArgumentException(s"Option '--insert-table-name' is required for export 'insert'")
+      }
+
+      if (pExportOpen && pExportFormat != ExportFormat.insert && pExportFormat != ExportFormat.csv
+        && pExportFormat != ExportFormat.excel) {
+        throw new IllegalArgumentException(s"Option '--export-open' is only supported for --export 'insert', 'csv' or 'excel'")
       }
 
       if (maxRows > 0) preparedStatement.setMaxRows(maxRows + 1)
@@ -134,7 +173,7 @@ class DatabaseCommands extends Commands with Encryption {
 
       if (pTimeout > 0) preparedStatement.setQueryTimeout(pTimeout)
       val parameterArray = Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20)
-      setParameters(preparedStatement, parameterArray)
+      setParameters(connection, preparedStatement, parameterArray)
       val result = if (preparedStatement.execute()) {
         val resultSet = preparedStatement.getResultSet
         val resultSetMetaData = resultSet.getMetaData
@@ -153,14 +192,24 @@ class DatabaseCommands extends Commands with Encryption {
           }'")
         }
 
+        val exportFormat = if (pEmailTo && pExportFormat == ExportFormat.console) ExportFormat.html else pExportFormat
         var numberOfRows = 0
-        val formatResultTuple = pOutputFormat match {
-          case OutputFormat.console ⇒ formatConsole(resultSetMetaData, resultSet, selectedColumms, tableBorder, headerRow, maxRows)
-          case OutputFormat.excel ⇒ formatExcel(preparedStatement, resultSetMetaData, resultSet, sql, parameterArray, selectedColumms, headerRow, maxRows,
-            Option(pOutputPath))
-          case OutputFormat.csv ⇒ formatCSV(preparedStatement, resultSetMetaData, resultSet, sql, parameterArray, selectedColumms, headerRow, maxRows,
-            Option(pOutputPath))
+        val formatResultTuple = exportFormat match {
+          case ExportFormat.console ⇒ formatConsole(resultSetMetaData, resultSet, selectedColumms, tableBorder, headerRow, maxRows)
+          case ExportFormat.excel ⇒ formatExcel(preparedStatement, resultSetMetaData, resultSet, sql, parameterArray, selectedColumms, headerRow, maxRows,
+            Option(pExportPath), pEmailTo, pEmailSubject, pEmailBody)
+          case ExportFormat.csv ⇒ formatCSV(preparedStatement, resultSetMetaData, resultSet, sql, selectedColumms, headerRow, maxRows,
+            Option(pExportPath), pEmailTo, pEmailSubject, pEmailBody)
+          case ExportFormat.html ⇒ formatHTML(preparedStatement, resultSetMetaData, resultSet, sql, selectedColumms, headerRow, maxRows,
+            Option(pExportPath), pEmailTo, pEmailSubject, pEmailBody)
+          case ExportFormat.insert ⇒ formatInsert(preparedStatement, resultSetMetaData, resultSet, sql, selectedColumms, maxRows,
+            Option(pExportPath), pInsertTableName, pEmailTo, pEmailSubject, pEmailBody)
         }
+
+        if (pExportOpen && formatResultTuple._3.isDefined) {
+          java.awt.Desktop.getDesktop().open(formatResultTuple._3.get)
+        }
+
         maxRowsReached = resultSet.next()
         formatResultTuple._2 + (if (maxRowsReached) s" (maximum number of rows reached)" else "")
       } else if (isDmlStatement(sql)) {
@@ -249,19 +298,25 @@ class DatabaseCommands extends Commands with Encryption {
     @CliOption(key = Array("header-row"), mandatory = false, help = "Table border for the query results") pHeaderRow: String,
     @CliOption(key = Array("columns"), mandatory = false, help = "The columns to include in the query results") pColumns: String,
     @CliOption(key = Array("filter"), mandatory = false, help = "The filter") pFilter: String,
-    @CliOption(key = Array("output-path"), mandatory = false, specifiedDefaultValue = "specified",
-      help = "The name of the file to write the query results to") pOutputPath: String,
+    @CliOption(key = Array("export-path"), mandatory = false, specifiedDefaultValue = "specified",
+      help = "The name of the file to write the query results to") pExportPath: String,
     @CliOption(key = Array("count"), mandatory = false, specifiedDefaultValue = "specified",
       help = "If specified the query result is the row count") pCount: String,
-    @CliOption(key = Array("output-format"), mandatory = false, unspecifiedDefaultValue = "console",
-      help = "The output format") pOutputFormat: OutputFormat = OutputFormat.console,
+    @CliOption(key = Array("export-format"), mandatory = false, unspecifiedDefaultValue = "console",
+      help = "The output format") pExportFormat: ExportFormat = ExportFormat.console,
+    @CliOption(key = Array("export-open"), mandatory = false, specifiedDefaultValue = "true",
+      help = "Opens the output file in the default application") pExportOpen: String,
     @CliOption(key = Array("order"), mandatory = false, help = "The columns to order") pOrder: String,
-    @CliOption(key = Array("database"), mandatory = false, help = "The database alias") pDatabase: Database
+    @CliOption(key = Array("database"), mandatory = false, help = "The database alias") pDatabase: Database,
+    @CliOption(key = Array("email-to"), mandatory = false, help = "Comma separated list of email addresses") pEmailTo: String,
+    @CliOption(key = Array("email-subject"), mandatory = false, help = "The subject of the email") pEmailSubject: String,
+    @CliOption(key = Array("email-body"), mandatory = false, help = "The body of the email (html)") pEmailBody: String
   ): String = {
     withConnection((connection: Connection, database: Database) ⇒ {
-      execute(s"select ${if (pCount) "count(*)" else "*"} from ${pTable.name} ${if (pFilter) "where " + pFilter else ""} ${if (pOrder) "order by " + pOrder else ""}", null, pDatabase, //scalastyle:ignore
+      executeSql(s"select * from ${pTable.name} ${if (pFilter) "where " + pFilter else ""} ${if (pOrder) "order by " + pOrder else ""}", null, pDatabase, //scalastyle:ignore
         pMaxRows = pMaxRows, pTimeout = pTimeout, pTableBorder = pTableBorder, pHeaderRow = pHeaderRow, pColumns = pColumns,
-        pOutputPath = pOutputPath, pOutputFormat = pOutputFormat)
+        pExportPath = pExportPath, pExportFormat = pExportFormat, pExportOpen = pExportOpen, pInsertTableName = pTable.name, pCount = pCount,
+        pEmailTo = pEmailTo, pEmailSubject = pEmailSubject, pEmailBody = pEmailBody)
     }, if (Option(pDatabase).isDefined) Option(pDatabase.alias) else None)
   }
 
@@ -275,16 +330,17 @@ class DatabaseCommands extends Commands with Encryption {
   def provided(pDatabase: Database, pCommand: String, p1: String = null, p2: String = null): String = { //scalastyle:ignore
     withConnection((connection: Connection, database: Database) ⇒ {
       val databaseType = database.url.substring(database.url.indexOf(":") + 1, database.url.indexOf(":", database.url.indexOf(":") + 1))
-      execute(null, new Template(getProvidedScriptFile(database, pCommand).getPath), pDatabase, p1 = p1, p2 = p2, pMaxRows = 0) //scalastyle:ignore
+      executeSql(null, new Template(getProvidedScriptFile(database, pCommand).getPath), pDatabase, p1 = p1, p2 = p2, pMaxRows = 0, pCount = null) //scalastyle:ignore
     }, if (Option(pDatabase).isDefined) Option(pDatabase.alias) else None)
   }
 
-  def setParameters(preparedStatement: PreparedStatement, parameterArray: Array[String]): Unit = { //scalastyle:ignore
+  def setParameters(connection: Connection, preparedStatement: PreparedStatement, parameterArray: Array[String]): Unit = { //scalastyle:ignore
 
     for (i ← List.range(1, preparedStatement.getParameterMetaData().getParameterCount() + 1)) {
       if (parameterArray(i - 1) == null) throw new IllegalArgumentException(s"You should specify option --p$i for this statement") //scalastyle:ignore
 
       val parameterClassResult = Try(Class.forName(preparedStatement.getParameterMetaData().getParameterClassName(i)))
+      //println(parameterClassResult)
       parameterClassResult match {
         case Success(parameterClass) ⇒
           try {
@@ -382,14 +438,24 @@ class DatabaseCommands extends Commands with Encryption {
       || firstStatementLine.startsWith("insert"))
   }
 
-  @CliCommand(value = Array("encrypt-password"), help = "Encrypts a password for use in sql-template-cli.conf")
-  def encryptString(): String = {
-    "Replace [DATABASE_ALIAS] in below line and add it to conf/sql-template-cli.conf\n\ndatabase.[DATABASE_ALIAS].password.encrypted=\"" +
-      encrypt(new ConsoleReader().readLine(prompt("Enter password: "), new Character('*'))) + "\""
+  @CliCommand(value = Array("encrypt-database-password"), help = "Encrypts database password for use in sql-template-cli.conf")
+  def encryptDatabasePassword(
+    @CliOption(key = Array("database"), mandatory = true, help = "The database alias") pDatabase: String
+  ): String = {
+    s"""Add below line to conf/sql-template-cli.conf\n\ndatabase.${pDatabase}.password.encrypted=\"${
+      encrypt(new ConsoleReader().readLine(prompt("Enter password: "), new Character('*')))
+    }""""
+  }
+
+  @CliCommand(value = Array("encrypt-mail-password"), help = "Encrypts mail password for use in sql-template-cli.conf")
+  def encryptMailPassword(): String = {
+    s"""Add below line to conf/sql-template-cli.conf\n\nmail.smtp.password.encrypted=\"${
+      encrypt(new ConsoleReader().readLine(prompt("Enter password: "), new Character('*')))
+    }""""
   }
 
   def formatConsole(resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, selectedColumms: List[Int], tableBorder: Boolean, headerRow: Boolean,
-    maxRows: Int): Tuple2[Int, String] = {
+    maxRows: Int): Tuple3[Int, String, Option[File]] = {
     var data: Array[Array[Object]] = Array[Array[Object]]()
     var numberOfRows = 0
     while ((maxRows == 0 || numberOfRows < maxRows) && resultSet.next()) {
@@ -400,32 +466,107 @@ class DatabaseCommands extends Commands with Encryption {
     (numberOfRows, s"${
       renderTable(selectedColumms.map(resultSetMetaData.getColumnLabel(_)).toArray, data, tableBorder, headerRow)
         .toString
-    }\nTotal rows: ${numberOfRows}")
+    }\nTotal rows: ${numberOfRows}", None)
   }
 
-  def formatCSV(preparedStatement: PreparedStatement, resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, sql: String, parameterArray: Array[String], //scalastyle:ignore
-    selectedColumms: List[Int], headerRow: Boolean, maxRows: Int, file: Option[String]): Tuple2[Int, String] = {
+  def formatInsert(preparedStatement: PreparedStatement, resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, sql: String, //scalastyle:ignore
+    selectedColumms: List[Int], maxRows: Int, file: Option[String], insertTableName: String, emailTo: String, emailSubject: String, emailBody: String): Tuple3[Int, String, Option[File]] = {
+    val outputFile = getOutputFile(file, "sql")
+    var numberOfRows = 0
+    val bufferedWriter = new BufferedWriter(new FileWriter(outputFile))
+    try {
+      while ((maxRows == 0 || numberOfRows < maxRows) && resultSet.next()) {
+        numberOfRows = numberOfRows + 1
+        bufferedWriter.write(s"insert into $insertTableName (" + selectedColumms.map(value ⇒ {
+          resultSetMetaData.getColumnLabel(value)
+        }).mkString(", ") + ") values (")
+
+        bufferedWriter.write(selectedColumms.map(value ⇒ {
+          resultSetMetaData.getColumnType(value) match {
+            case BIT       ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getBoolean(value) else "NULL"
+            case BOOLEAN   ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getBoolean(value) else "NULL"
+            case INTEGER   ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getInt(value) else "NULL"
+            case SMALLINT  ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getShort(value) else "NULL"
+            case BIGINT    ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getLong(value) else "NULL"
+            case REAL      ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getFloat(value) else "NULL"
+            case FLOAT     ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getDouble(value) else "NULL"
+            case DOUBLE    ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getDouble(value) else "NULL"
+            case DATE      ⇒ if (Option(resultSet.getString(value)).isDefined) "TO_DATE('" + SqlDateFormat.format(resultSet.getDate(value)) + "', 'DDMMYYYY HH24:MI:SS:MS')" else "NULL"
+            case TIMESTAMP ⇒ if (Option(resultSet.getString(value)).isDefined) "TO_DATE('" + SqlDateFormat.format(resultSet.getDate(value)) + "', 'DDMMYYYY HH24:MI:SS:MS')" else "NULL"
+            case DECIMAL   ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getBigDecimal(value) else "NULL"
+            case NUMERIC   ⇒ if (Option(resultSet.getString(value)).isDefined) resultSet.getBigDecimal(value) else "NULL"
+            case _         ⇒ if (Option(resultSet.getString(value)).isDefined) "'" + resultSet.getString(value) + "'" else "NULL"
+          }
+        }).mkString(", ") + ");\n")
+      }
+    } finally {
+      bufferedWriter.close
+    }
+
+    finishFormat(numberOfRows, emailTo, emailSubject, emailBody, Option(outputFile))
+  }
+
+  def formatCSV(preparedStatement: PreparedStatement, resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, sql: String, //scalastyle:ignore
+    selectedColumms: List[Int], headerRow: Boolean, maxRows: Int, file: Option[String], emailTo: String, emailSubject: String, emailBody: String): Tuple3[Int, String, Option[File]] = {
     val outputFile = getOutputFile(file, "csv")
     var numberOfRows = 0
     val bufferedWriter = new BufferedWriter(new FileWriter(outputFile))
     try {
       bufferedWriter.write(selectedColumms.map(value ⇒ {
-        resultSetMetaData.getColumnLabel(value)
-      }).mkString(";") + "\n")
+        s""""${resultSetMetaData.getColumnLabel(value)}""""
+      }).mkString(",") + "\n")
       while ((maxRows == 0 || numberOfRows < maxRows) && resultSet.next()) {
         numberOfRows = numberOfRows + 1
         bufferedWriter.write(selectedColumms.map(value ⇒ {
           "\"" + Option(resultSet.getString(value)).getOrElse("") + "\""
-        }).mkString(";") + "\n")
+        }).mkString(",") + "\n")
       }
     } finally {
       bufferedWriter.close
     }
-    (numberOfRows, s"$numberOfRows rows exported to ${outputFile.getCanonicalPath()}")
+
+    finishFormat(numberOfRows, emailTo, emailSubject, emailBody, Option(outputFile))
+  }
+
+  def formatHTML(preparedStatement: PreparedStatement, resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, sql: String, //scalastyle:ignore
+    selectedColumms: List[Int], headerRow: Boolean, maxRows: Int, file: Option[String], emailTo: String, emailSubject: String, emailBody: String): Tuple3[Int, String, Option[File]] = {
+    val outputFile = getOutputFile(file, "html")
+    var numberOfRows = 0
+    val bufferedWriter = new BufferedWriter(new FileWriter(outputFile))
+    bufferedWriter.write(s"""<html>
+                            |  <body style="border-collapse: collapse; font-family: Trebuchet MS, Arial, Helvetica, sans-serif; border-collapse: collapse;">
+                            |    ${if (emailBody) s"$emailBody<br/><br/>" else ""}
+                            |    <table style="border-collapse: collapse;  border-collapse: collapse;">
+                            |      <tr>
+                            |""".stripMargin)
+    try {
+      bufferedWriter.write(selectedColumms.map(value ⇒ {
+        s"""        <th style="border-collapse: collapse; border: 1px solid #ddd; padding: 8px; padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white;">${resultSetMetaData.getColumnLabel(value)}</th>"""
+      }).mkString("\n"))
+      bufferedWriter.write("""
+                               |       </tr>
+                               |""".stripMargin)
+
+      while ((maxRows == 0 || numberOfRows < maxRows) && resultSet.next()) {
+        bufferedWriter.write(s"        <tr ${if (numberOfRows % 2 == 0) " style=\"background-color: #f2f2f2;\"" else ""}>\n")
+        numberOfRows = numberOfRows + 1
+        bufferedWriter.write(selectedColumms.map(value ⇒ {
+          s"""        <td style="border-collapse: collapse; border: 1px solid #ddd; padding: 8px;">${Option(resultSet.getString(value)).getOrElse("")}</td>"""
+        }).mkString("\n") + "\n")
+        bufferedWriter.write("        </tr>\n")
+      }
+      bufferedWriter.write("""   </table>
+                            |  </body>
+                            |</html>""".stripMargin)
+    } finally {
+      bufferedWriter.close
+    }
+
+    finishFormat(numberOfRows, emailTo, emailSubject, scala.io.Source.fromFile(outputFile).mkString)
   }
 
   def formatExcel(preparedStatement: PreparedStatement, resultSetMetaData: ResultSetMetaData, resultSet: ResultSet, sql: String, parameterArray: Array[String], //scalastyle:ignore 
-    selectedColumms: List[Int], headerRow: Boolean, maxRows: Int, file: Option[String]): Tuple2[Int, String] = {
+    selectedColumms: List[Int], headerRow: Boolean, maxRows: Int, file: Option[String], emailTo: String, emailSubject: String, emailBody: String): Tuple3[Int, String, Option[File]] = {
     val outputFile = getOutputFile(file, "xls")
     var numberOfRows = 0
     val fileOutputStream = new FileOutputStream(outputFile)
@@ -450,7 +591,7 @@ class DatabaseCommands extends Commands with Encryption {
       if (numberOfRows > MaxRowsHSSF) {
         fileOutputStream.close()
         outputFile.delete()
-        throw new IllegalArgumentException(s"ERROR: number of rows exceeds the maximum number of rows supported for output-format 'excel' ($MaxRowsHSSF)")
+        throw new IllegalArgumentException(s"ERROR: number of rows exceeds the maximum number of rows supported for export 'excel' ($MaxRowsHSSF)")
       }
 
       val dataRow = dataSheet.createRow(numberOfRows)
@@ -489,7 +630,25 @@ class DatabaseCommands extends Commands with Encryption {
     selectedColumms.map(value ⇒ dataSheet.autoSizeColumn(value - 1))
     workbook.write(fileOutputStream)
     fileOutputStream.close()
-    (numberOfRows, s"$numberOfRows rows exported to ${outputFile.getCanonicalPath()}")
+
+    finishFormat(numberOfRows, emailTo, emailSubject, emailBody, Option(outputFile))
+  }
+
+  def finishFormat(numberOfRows: Int, emailTo: String, emailSubject: String, emailBody: String, file: Option[File] = None): Tuple3[Int, String, Option[File]] = {
+    if (emailTo) {
+
+      file match {
+        case Some(f) ⇒
+          Email.send(emailTo, if (emailSubject == null) f.getName else emailSubject,
+            if (emailBody == null) s"Please find the query results in attached file." else emailBody, file)
+          (numberOfRows, s"${f.getName} ($numberOfRows rows) emailed to ${emailTo}", file)
+        case None ⇒
+          Email.send(emailTo, if (emailSubject == null) "Query Results" else emailSubject, emailBody, file)
+          (numberOfRows, s"$numberOfRows rows emailed to ${emailTo}", file)
+      }
+    } else {
+      (numberOfRows, s"$numberOfRows rows exported to ${file.get.getCanonicalPath()}", file)
+    }
   }
 
   def getHeaderCellStyle(workbook: HSSFWorkbook): CellStyle = {

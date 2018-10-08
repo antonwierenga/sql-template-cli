@@ -2,7 +2,7 @@ organization := "com.antonwierenga"
 
 name := "sql-template-cli"
 
-version := "0.0.1"
+version := "0.1.0"
 
 scalaVersion := "2.12.1"
 
@@ -17,6 +17,8 @@ libraryDependencies += "org.scala-lang.modules" % "scala-xml_2.12" % "1.0.6"
 libraryDependencies += "log4j" % "log4j" % "1.2.17"
 libraryDependencies += "com.h2database" % "h2" % "1.4.194"
 libraryDependencies += "org.apache.poi" % "poi" % "3.15"
+libraryDependencies += "javax.mail" % "javax.mail-api" % "1.5.1"
+libraryDependencies += "com.sun.mail" % "javax.mail" % "1.5.6"
 
 import scalariform.formatter.preferences._
 
